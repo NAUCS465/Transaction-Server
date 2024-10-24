@@ -60,7 +60,7 @@ public class TransactionServerProxy implements MessageTypes{
         try {
             writeToNet.writeObject(new Message(OPEN_TRANSACTION, null));
             transactionID = (Integer) readFromNet.readObject();
-        } catch {
+        } catch (IOException | ClassNotFoundException ex) {
             System.err.println("Error when Writing/reading Message");
         }
         
@@ -84,9 +84,9 @@ public class TransactionServerProxy implements MessageTypes{
             returnStatus = (int) readFromNet.readObject();
 
             // close all aspects 
-            readFromNet.close()
-            writeToNet.close()
-            serverConnection.close()
+            readFromNet.close();
+            writeToNet.close();
+            serverConnection.close();
         } catch (IOException | ClassNotFoundException ex) {
             System.err.println("Error occured");
         }
