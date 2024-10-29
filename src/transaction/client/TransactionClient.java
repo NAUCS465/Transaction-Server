@@ -33,7 +33,7 @@ public class TransactionClient extends Thread {
     public static String host;
     public static int port;
 
-    public ArrayList<Thread> threads = new ArrayList();
+    public ArrayList<Thread> threads = new ArrayList<>();
     public static boolean restartTransactions = true;
 
     /**

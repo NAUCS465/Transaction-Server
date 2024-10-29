@@ -16,7 +16,7 @@ public class AccountManager
     
     public AccountManager(int numberAccounts, int initialBalance) 
     {
-        accounts = new ArrayList();
+        accounts = new ArrayList<Account>();
         AccountManager.numberAccounts = numberAccounts;
         AccountManager.initialBalance = initialBalance;
         int accountIndex;

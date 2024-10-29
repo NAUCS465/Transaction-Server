@@ -29,7 +29,7 @@ public class Transaction {
             // the latter is at the very foundation to make the whole OCC work!
             this.transactionID = transactionID;
             this.lastAssignedTransactionNumber = lastCommittedTransactionNumber;
-	}
+	    }
 
         
 	public int read (int accountNumber)
@@ -77,16 +77,14 @@ public class Transaction {
 	}
 
 
-	public ArrayList getReadSet()
-	{
-            return readSet;
-	}
+	public ArrayList<Integer> getReadSet() {
+        return new ArrayList<Integer>();
+    }
 
 
-	public HashMap getWriteSet()
-	{
-            return writeSet;
-	}
+	public HashMap<Integer, Integer> getWriteSet() {
+        return new HashMap<Integer, Integer>();
+    }
 
 
 	public int getTransactionID() 
