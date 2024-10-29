@@ -61,6 +61,7 @@ public class TransactionClient extends Thread {
             sleepMilliseconds   = Integer.parseInt(clientProperties.getProperty("SLEEP_MILLISECONDS"));
         } catch (IOException | NumberFormatException ex) {
             // whatever
+            System.err.println("Error loading properties: " + ex.getMessage());
         }
 
         System.err.println("Properties Summary");
@@ -187,6 +188,6 @@ public class TransactionClient extends Thread {
      * @param args
      */
     public static void main(String[] args) {
-        (new TransactionClient("../../config/TransactionClient.properties", "../../config/TransactionServer.properties")).start();
+        (new TransactionClient("config/TransactionClient.properties", "config/TransactionServer.properties")).start();
     }
 }
