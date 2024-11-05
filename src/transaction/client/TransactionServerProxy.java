@@ -75,8 +75,11 @@ public class TransactionServerProxy implements MessageTypes{
      * @return the status, i.e. either TRANSACTION_COMMITTED or TRANSACTION_ABORTED
      */
     public int closeTransaction() {
-        int returnStatus = TRANSACTION_ABORTED; // Default to aborted in case of an error
+        int returnStatus = TRANSACTION_ABORTED;
 
+        // send CLOSE_TRANSACTION message & receive returnStatus
+        // shut down connection
+        // ...
         try {
             // Send CLOSE_TRANSACTION message to the server
             Message closeTransactionMessage = new Message(CLOSE_TRANSACTION, transactionID);
@@ -88,9 +91,12 @@ public class TransactionServerProxy implements MessageTypes{
 
         } catch (IOException | ClassNotFoundException e) {
             System.err.println("Error in closeTransaction: " + e.getMessage());
-        } finally {
+        } 
+        // This was written in for some reason the serverConnection wasnt manually closing....
+        finally {
             // Ensure the connection is closed after completing the transaction
             try {
+                // garentee the server is closed
                 if (serverConnection != null) {
                     serverConnection.close();
                 }
@@ -112,6 +118,8 @@ public class TransactionServerProxy implements MessageTypes{
     public int read(int accountNumber) {
         int balance = 0;
 
+        // write READ_REQUEST and receive balance
+        // ...
         try {
             // Send READ_REQUEST message to the server with the account number
             Message readRequestMessage = new Message(READ_REQUEST, accountNumber);
@@ -139,6 +147,8 @@ public class TransactionServerProxy implements MessageTypes{
     public int write(int accountNumber, int amount) {
         int priorBalance = 0;
 
+        // write WRITE_REQUEST and receive prior balance
+        // ...
         try {
             // Create a write request message with the account number and amount as content
             Message writeRequestMessage = new Message(WRITE_REQUEST, new int[] { accountNumber, amount });

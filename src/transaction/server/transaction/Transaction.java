@@ -35,16 +35,24 @@ public class Transaction {
 	public int read(int accountNumber) {
         Integer balance;
 
-        // Check if the account number is in the writeSet
+        // check if value to be read was written by this transaction
+        // i.e. is contained in the writeSet of this transaction
+        // use get() on the writeSet
+        // ...
         if (writeSet.containsKey(accountNumber)) {
-            // If it is, get the modified balance
             balance = writeSet.get(accountNumber);
-        } else {
-            // If not, read the committed version from AccountManager
+        } 
+
+        // if it is not in the writeSet, read the committed version of it from AccountManager
+        // note: null and numerical zero are not the same thing!
+        // ...
+        else {
             balance = TransactionServer.accountManager.read(accountNumber);
         }
 
-        // Add account number to readSet if it's not already present
+        // check if this account number is already in the readSet
+        // and add it, if not
+        // ...
         if (!readSet.contains(accountNumber)) {
             readSet.add(accountNumber);
         }
@@ -56,14 +64,17 @@ public class Transaction {
 	public int write(int accountNumber, int newBalance) {
         int oldBalance;
 
-        // First, get the current balance (either from writeSet if previously modified or from AccountManager)
+        // read (and return) old balance
+        // ...
         if (writeSet.containsKey(accountNumber)) {
-            oldBalance = writeSet.get(accountNumber); // Use modified balance if already written in this transaction
+            oldBalance = writeSet.get(accountNumber);
         } else {
-            oldBalance = TransactionServer.accountManager.read(accountNumber); // Use committed balance otherwise
+            oldBalance = TransactionServer.accountManager.read(accountNumber); 
         }
 
-        // Put <accountNumber, newBalance> in writeSet (this may overwrite prior writes to this account in the transaction)
+        // put <accountNumber, newBalance> in writeSet
+        // possibly overwriting a prior write
+        // ...
         writeSet.put(accountNumber, newBalance);
 
         return oldBalance;
