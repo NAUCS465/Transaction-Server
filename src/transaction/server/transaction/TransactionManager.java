@@ -357,7 +357,7 @@ public class TransactionManager implements MessageTypes
                         int newBalance = (Integer) writeContent[1];
                         
                         // add log pre write
-                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " >>>>>>>>>>>>>>>>>>> account #" + accountNumber + ", balance to write $" + balance);
+                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " >>>>>>>>>>>>>>>>>>> account #" + accountNumber + ", balance to write $" + newBalance);
                         
                         /// do the write 
                         // ======>
@@ -374,7 +374,7 @@ public class TransactionManager implements MessageTypes
                         }
 
                         // add log post write
-                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " <<<<<<<<<<<<<<<<<<<< account #" + accountNumber + ", wrote $" + balance);
+                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " <<<<<<<<<<<<<<<<<<<< account #" + accountNumber + ", wrote $" + newBalance);
 
                         break;
 

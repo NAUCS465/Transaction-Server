@@ -78,12 +78,12 @@ public class Transaction {
 
 
 	public ArrayList<Integer> getReadSet() {
-        return new ArrayList<Integer>();
+        return readSet;
     }
 
 
 	public HashMap<Integer, Integer> getWriteSet() {
-        return new HashMap<Integer, Integer>();
+        return writeSet;
     }
 
 
