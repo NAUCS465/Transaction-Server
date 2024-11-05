@@ -71,57 +71,39 @@ public class TransactionManager implements MessageTypes
      * @param transaction Transaction to be validated
      * @return a flag indicating whether validation was successful
      */
-    public boolean validateTransaction(Transaction transaction)
-        {
-            int transactionNumber;
-            int lastCommittedTransactionNumber;
-            int transactionNumberIndex;
-            
-            ArrayList<Integer> readSet = transaction.getReadSet();
-            HashMap<Integer, Integer> checkedTransactionWriteSet;
-            Iterator<Integer> readSetIterator;
-            
-            Transaction checkedTransaction;
-            
-            // assign a transaction number to this transaction
-            // ...        
-            synchronized (TransactionManager.class) {
-                transactionNumberCounter++;
-                transaction.setTransactionNumber(transactionNumberCounter);
-            }    
+    public boolean validateTransaction(Transaction transaction) {
+        int transactionNumber;
+        int lastCommittedTransactionNumber = transaction.getLastAssignedTransactionNumber();
+        ArrayList<Integer> readSet = transaction.getReadSet();
 
-            transactionNumber = transaction.getTransactionNumber();
-            lastCommittedTransactionNumber = transaction.getLastAssignedTransactionNumber();
+        // Assign a new transaction number to this transaction
+        synchronized (TransactionManager.class) {
+            transactionNumber = ++transactionNumberCounter;
+        }
+        transaction.setTransactionNumber(transactionNumber);
 
-            // run through all overlapping transactions
-            // use transactionNumberIndex as the transaction number of overlapping transaction currently looked at
-            for (transactionNumberIndex = lastCommittedTransactionNumber + 1; transactionNumberIndex <= transactionNumberCounter; transactionNumberIndex++)
-            {
-                // get transaction with transaction number transactionNumberIndex
-                // from committedTransactions -> checkedTransaction
-                // ...
-                checkedTransaction = committedTransactions.get(transactionNumberIndex);
-                
-                // make sure transaction with transactionNumberIndex was not aborted before
-                if(checkedTransaction != null)
-                {
-                    // check our own read set against the write set of the checkedTransaction
-                    // ...
-                    checkedTransactionWriteSet = checkedTransaction.getWriteSet();
+        // Iterate through all transactions with a transaction number greater than the last committed transaction number
+        for (int transactionNumberIndex = lastCommittedTransactionNumber + 1; transactionNumberIndex <= transactionNumberCounter; transactionNumberIndex++) {
+            Transaction checkedTransaction = committedTransactions.get(transactionNumberIndex);
 
-                    for (Integer checkedAccount : readSet) {
-                        if (checkedTransactionWriteSet.containsKey(checkedAccount)) {
-                            // Conflict detected: the account in the read set was modified by an overlapping committed transaction
-                            transaction.log("[TransactionManager.validateTransaction] Transaction #" + transaction.getTransactionID() + " failed validation due to conflict with committed transaction #" + checkedTransaction.getTransactionID());
-                            return false;
-                        }
+            // Ensure the transaction with transactionNumberIndex was not aborted and is present in committed transactions
+            if (checkedTransaction != null) {
+                HashMap<Integer, Integer> checkedTransactionWriteSet = checkedTransaction.getWriteSet();
+
+                // Check for conflicts: if any account in our read set was written by the checked transaction
+                for (Integer accountNumber : readSet) {
+                    if (checkedTransactionWriteSet.containsKey(accountNumber)) {
+                        // Conflict detected: return false
+                        transaction.log("[TransactionManager.validateTransaction] Conflict detected with Transaction #" + checkedTransaction.getTransactionID());
+                        return false;
                     }
                 }
             }
-                        
-            transaction.log("[TransactionManager.validateTransaction] Transaction #" + transaction.getTransactionID() + " successfully validated");
-            return true;
         }
+
+        transaction.log("[TransactionManager.validateTransaction] Transaction #" + transaction.getTransactionID() + " successfully validated");
+        return true;
+    }
      
     
     /**
@@ -129,22 +111,23 @@ public class TransactionManager implements MessageTypes
      * 
      * @param transaction Transaction to be written
      */
-    public void writeTransaction(Transaction transaction)
-    {
+    public void writeTransaction(Transaction transaction) {
         HashMap<Integer, Integer> transactionWriteSet = transaction.getWriteSet();
         int account;
         int balance;
-         
-        // get all the entries of this write set
-        for (Map.Entry<Integer, Integer> entry : transactionWriteSet.entrySet()) {
-            int accountNumber = entry.getKey();
-            int newBalance = entry.getValue();
 
-            // Write the new balance to the account using AccountManager
-            TransactionServer.accountManager.write(accountNumber, newBalance);
-                            
-            transaction.log("[TransactionManager.writeTransaction] Transaction #" + transaction.getTransactionID() + " written");                    
-        }        
+        // Get all entries in the write set and write them to the operational data (AccountManager)
+        for (Map.Entry<Integer, Integer> entry : transactionWriteSet.entrySet()) {
+            account = entry.getKey();
+            balance = entry.getValue();
+
+            // Write the new balance to the account in AccountManager
+            TransactionServer.accountManager.write(account, balance);
+
+            // Log the write operation
+            transaction.log("[TransactionManager.writeTransaction] Transaction #" + transaction.getTransactionID() 
+                            + " wrote balance $" + balance + " to account #" + account);
+        }
     }
 
     
@@ -211,33 +194,26 @@ public class TransactionManager implements MessageTypes
                     // -------------------------------------------------------------------------------------------
                     case OPEN_TRANSACTION:
                     // -------------------------------------------------------------------------------------------
-                        int newTransactionID;
 
-                        // synchronize on the runningTransactions
-                        synchronized (runningTransactions) 
-                        {
-                            // create new transaction and assign a new transaction ID
-                            // most importantly, pass in the last assigned transaction number
-                            // ...
-                            newTransactionID = ++transactionIdCounter;
+                        // Synchronize on the runningTransactions to ensure thread safety
+                        synchronized (runningTransactions) {
+                            // Create a new transaction and assign a new transaction ID
+                            int newTransactionID = ++transactionIdCounter;
                             int lastCommittedTransactionNumber = transactionNumberCounter;
                             transaction = new Transaction(newTransactionID, lastCommittedTransactionNumber);
-                            
-                            // add the new transaction to ArrayList runningTransactions
-                            // ...
+
+                            // Add the new transaction to the runningTransactions list
                             runningTransactions.add(transaction);
                         }
 
-                        // write back transactionID to client
-                        // ...
                         try {
-                            writeToNet.writeObject(newTransactionID);
+                            // Send the transaction ID back to the client
+                            writeToNet.writeObject(new Message(OPEN_TRANSACTION, transaction.getTransactionID()));
                         } catch (IOException e) {
-                            System.err.println("[TransactionManagerWorker.run] Failed to send new transaction ID to client");
-                            System.exit(1);
+                            System.err.println("[TransactionManagerWorker.run] Failed to send transaction ID to client: " + e.getMessage());
                         }
 
-                        // add log
+                        // Log the transaction opening
                         transaction.log("[TransactionManagerWorker.run] " + OPEN_COLOR + "OPEN_TRANSACTION" + RESET_COLOR + " #" + transaction.getTransactionID());
 
                         break;
@@ -246,69 +222,63 @@ public class TransactionManager implements MessageTypes
                     // -------------------------------------------------------------------------------------------
                     case CLOSE_TRANSACTION:
                     // -------------------------------------------------------------------------------------------
-                        
-                        synchronized (runningTransactions)
-                        {
-                            // remove transaction from ArrayList runningTransactions
-                            // ...
+                        synchronized (runningTransactions) {
+                            // Remove the transaction from runningTransactions
+                            runningTransactions.remove(transaction);
 
-                            // the BIG thing, we enter validation phase and, if successful, the update phase
-                            if (validateTransaction(transaction))
-                            {
-                                // add this transaction to committedTransactions
-                                // important step! information used in other transactions' validations, if they overlap with this one
-                                // ...
+                            // Attempt to validate the transaction
+                            if (validateTransaction(transaction)) {
+                                // Validation successful, commit the transaction
+
+                                // Add this transaction to committedTransactions
                                 committedTransactions.put(transaction.getTransactionNumber(), transaction);
-                                
-                                // this is the update phase ... write data to operational data in one go
-                                // ...
+
+                                // Write the transaction's data to the AccountManager
                                 writeTransaction(transaction);
-                                
-                                // tell client that transaction committed
-                                // ...      
+
+                                // Notify the client that the transaction committed
                                 try {
-                                    writeToNet.writeObject(TRANSACTION_COMMITTED);
+                                    writeToNet.writeObject(new Message(TRANSACTION_COMMITTED, null));
                                 } catch (IOException e) {
-                                    System.err.println("[TransactionManagerWorker.run] Failed to send commit confirmation to client");
-                                    System.exit(1);
+                                    System.err.println("[TransactionManagerWorker.run] Failed to notify client of transaction commit: " + e.getMessage());
                                 }
 
-                                // add log committed
-                                transaction.log("[TransactionManagerWorker.run] " + COMMIT_COLOR + "CLOSE_TRANSACTION"+ RESET_COLOR + " #" + transaction.getTransactionID() + " - COMMITTED");
-                            }
-                            else
-                            {
-                                // validation failed, abort this transaction
-                                // there is not anything that is done explicitly, aborting is essentially doing nothing
+                                // Log the successful commit
+                                transaction.log("[TransactionManagerWorker.run] " + COMMIT_COLOR + "CLOSE_TRANSACTION" + RESET_COLOR + " #" 
+                                                + transaction.getTransactionID() + " - COMMITTED");
+                            } else {
+                                // Validation failed, abort the transaction
+
+                                // Add the transaction to the list of aborted transactions
                                 abortedTransactions.add(transaction);
 
-                                // tell client that transaction was aborted
-                                // ...
+                                // Notify the client that the transaction was aborted
                                 try {
-                                    writeToNet.writeObject(TRANSACTION_ABORTED);
+                                    writeToNet.writeObject(new Message(TRANSACTION_ABORTED, null));
                                 } catch (IOException e) {
-                                    System.err.println("[TransactionManagerWorker.run] Failed to send abort confirmation to client");
-                                    System.exit(1);
+                                    System.err.println("[TransactionManagerWorker.run] Failed to notify client of transaction abort: " + e.getMessage());
                                 }
 
-                                // add log aborted
-                                transaction.log("[TransactionManagerWorker.run] " + ABORT_COLOR + "CLOSE_TRANSACTION"+ RESET_COLOR + " #" + transaction.getTransactionID() + " - ABORTED");
+                                // Log the aborted transaction
+                                transaction.log("[TransactionManagerWorker.run] " + ABORT_COLOR + "CLOSE_TRANSACTION" + RESET_COLOR + " #" 
+                                                + transaction.getTransactionID() + " - ABORTED");
                             }
                         }
 
-                        // regardless whether the transaction committed or aborted, shut down network connections
-                        // ...
+                        // Close network connections after transaction completion
                         try {
                             readFromNet.close();
                             writeToNet.close();
                             client.close();
                         } catch (IOException e) {
-                            System.err.println("[TransactionManagerWorker.run] Error when closing connection to client");
+                            System.err.println("[TransactionManagerWorker.run] Error closing connection after CLOSE_TRANSACTION: " + e.getMessage());
                         }
 
-                        // finally print out the transaction's log
-                        if (TransactionServer.transactionView) 
-                        {
+                        // Stop further processing for this transaction
+                        keepgoing = false;
+
+                        // Print the transaction log if the transaction view is enabled
+                        if (TransactionServer.transactionView) {
                             System.out.println(transaction.getLog());
                         }
 
@@ -319,29 +289,24 @@ public class TransactionManager implements MessageTypes
                     case READ_REQUEST:
                     // -------------------------------------------------------------------------------------------
  
-                        // get account number
-                        // ...
+                        // Retrieve the account number from the message content
                         accountNumber = (Integer) message.getContent();
-                        
-                        // add log pre read
-                        transaction.log("[TransactionManagerWorker.run] "+ READ_COLOR + "READ_REQUEST" + RESET_COLOR + " >>>>>>>>>>>>>>>>>>>> account #" + accountNumber);
 
-                        // read balance from account
-                        // ======>
+                        // Log the pre-read action
+                        transaction.log("[TransactionManagerWorker.run] " + READ_COLOR + "READ_REQUEST" + RESET_COLOR + " >>>>>>>>>>>>>>>>>>>> account #" + accountNumber);
+
+                        // Read the balance from the account using the transaction's read method
                         balance = transaction.read(accountNumber);
-                        // <======
 
-                        // confirm read to client
-                        // ...
+                        // Send the balance back to the client
                         try {
-                            writeToNet.writeObject(balance);
+                            writeToNet.writeObject(new Message(READ_REQUEST, balance));
                         } catch (IOException e) {
-                            System.err.println("[TransactionManagerWorker.run] Failed to send read balance to client");
-                            System.exit(1);
+                            System.err.println("[TransactionManagerWorker.run] Failed to send balance to client: " + e.getMessage());
                         }
 
-                        // add log post read
-                        transaction.log("[TransactionManagerWorker.run] "+ READ_COLOR + "READ_REQUEST" + RESET_COLOR + " <<<<<<<<<<<<<<<<<<<< account #" + accountNumber + ", balance $" + balance);
+                        // Log the post-read action with the balance obtained
+                        transaction.log("[TransactionManagerWorker.run] " + READ_COLOR + "READ_REQUEST" + RESET_COLOR + " <<<<<<<<<<<<<<<<<<<< account #" + accountNumber + ", balance $" + balance);
 
                         break;
 
@@ -350,31 +315,26 @@ public class TransactionManager implements MessageTypes
                     case WRITE_REQUEST:
                     // -------------------------------------------------------------------------------------------
 
-                        // get the message content: account number and balance to write
-                        // ....
-                        Object[] writeContent = (Object[]) message.getContent();
-                        accountNumber = (Integer) writeContent[0];
-                        int newBalance = (Integer) writeContent[1];
-                        
-                        // add log pre write
-                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " >>>>>>>>>>>>>>>>>>> account #" + accountNumber + ", balance to write $" + newBalance);
-                        
-                        /// do the write 
-                        // ======>
-                        int oldBalance = transaction.write(accountNumber, balance);
-                        // <======
+                        // Retrieve the account number and balance to write from the message content
+                        int[] content = (int[]) message.getContent();
+                        accountNumber = content[0];
+                        balance = content[1];
 
-                        // write back old balance to client
-                        // ....
+                        // Log the pre-write action
+                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " >>>>>>>>>>>>>>>>>>> account #" + accountNumber + ", balance to write $" + balance);
+
+                        // Write the new balance to the account using the transaction's write method
+                        int oldBalance = transaction.write(accountNumber, balance);
+
+                        // Send the old balance back to the client
                         try {
-                            writeToNet.writeObject(oldBalance);
+                            writeToNet.writeObject(new Message(WRITE_REQUEST, oldBalance));
                         } catch (IOException e) {
-                            System.err.println("[TransactionManagerWorker.run] Failed to send old balance to client");
-                            System.exit(1);
+                            System.err.println("[TransactionManagerWorker.run] Failed to send old balance to client: " + e.getMessage());
                         }
 
-                        // add log post write
-                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " <<<<<<<<<<<<<<<<<<<< account #" + accountNumber + ", wrote $" + newBalance);
+                        // Log the post-write action with the new balance written
+                        transaction.log("[TransactionManagerWorker.run] " + WRITE_COLOR + "WRITE_REQUEST" + RESET_COLOR + " <<<<<<<<<<<<<<<<<<<< account #" + accountNumber + ", wrote $" + balance);
 
                         break;
 
@@ -414,10 +374,11 @@ public class TransactionManager implements MessageTypes
                     // -------------------------------------------------------------------------------------------
                     case SHUTDOWN:
                     // -------------------------------------------------------------------------------------------
-                        // bail out
-                        keepgoing = false;
 
                         TransactionServer.shutDown();
+                        
+                        // bail out
+                        keepgoing = false;
                         
                         break;                       
 

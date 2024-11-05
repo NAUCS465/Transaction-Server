@@ -29,51 +29,45 @@ public class Transaction {
             // the latter is at the very foundation to make the whole OCC work!
             this.transactionID = transactionID;
             this.lastAssignedTransactionNumber = lastCommittedTransactionNumber;
-	    }
-
-        
-	public int read (int accountNumber)
-	{       
-            Integer balance;
-
-            // check if value to be read was written by this transaction
-            // i.e. is contained in the writeSet of this transaction
-            // use get() on the writeSet
-            // ...
-            if (writeSet.containsKey(accountNumber)) {
-                balance = writeSet.get(accountNumber);
-            } 
-            // if it is not in the writeSet, read the committed version of it from AccountManager
-            // note: null and numerical zero are not the same thing!
-            // ...
-            else {
-                balance = TransactionServer.accountManager.read(accountNumber);
-            }
-
-            // check if this account number is already in the readSet
-            // and add it, if not
-            // ...
-
-            if (!readSet.contains(accountNumber)) {
-                readSet.add(accountNumber);
-            }
-
-            return balance;
 	}
 
+        
+	public int read(int accountNumber) {
+        Integer balance;
 
-	public int write (int accountNumber, int newBalance) 
-	{
-            // read (and return) old balance
-            // ...
-            int oldBalance = read(accountNumber);
+        // Check if the account number is in the writeSet
+        if (writeSet.containsKey(accountNumber)) {
+            // If it is, get the modified balance
+            balance = writeSet.get(accountNumber);
+        } else {
+            // If not, read the committed version from AccountManager
+            balance = TransactionServer.accountManager.read(accountNumber);
+        }
 
-            // put <accountNumber, newBalance> in writeSet
-            // possibly overwriting a prior write
-            // ...
-            writeSet.put(accountNumber, newBalance);
+        // Add account number to readSet if it's not already present
+        if (!readSet.contains(accountNumber)) {
+            readSet.add(accountNumber);
+        }
 
-            return oldBalance;
+        return balance;
+    }
+
+
+	public int write(int accountNumber, int newBalance) {
+        int oldBalance;
+
+        // First, get the current balance (either from writeSet if previously modified or from AccountManager)
+        if (writeSet.containsKey(accountNumber)) {
+            oldBalance = writeSet.get(accountNumber); // Use modified balance if already written in this transaction
+        } else {
+            oldBalance = TransactionServer.accountManager.read(accountNumber); // Use committed balance otherwise
+        }
+
+        // Put <accountNumber, newBalance> in writeSet (this may overwrite prior writes to this account in the transaction)
+        writeSet.put(accountNumber, newBalance);
+
+        return oldBalance;
+
 	}
 
 

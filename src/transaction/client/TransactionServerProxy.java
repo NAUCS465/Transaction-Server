@@ -44,26 +44,27 @@ public class TransactionServerProxy implements MessageTypes{
      */
     public int openTransaction() {
 
-        // open up connection to server
-        // ...
-        try{
+        try {
+            // open up connection to server
+            // ...
             serverConnection = new Socket(host, port);
+
             writeToNet = new ObjectOutputStream(serverConnection.getOutputStream());
             readFromNet = new ObjectInputStream(serverConnection.getInputStream());
-        } catch (IOException ex) {
-            System.err.println("[openTransaction] Error occured when opening object in/out stream");
+            
+            // send OPEN_TRANSACTION message & receive transactionID
+            // leave connection open!
+            // ...
+            Message openTransactionMessage = new Message(OPEN_TRANSACTION);
+            writeToNet.writeObject(openTransactionMessage);
+
+            Message responseMessage = (Message) readFromNet.readObject();
+            transactionID = (Integer) responseMessage.getContent();
+
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error in openTransaction: " + e.getMessage());
         }
-        
-        // send OPEN_TRANSACTION message & receive transactionID
-        // leave connection open!
-        // ...
-        try {
-            writeToNet.writeObject(new Message(OPEN_TRANSACTION, null));
-            transactionID = (Integer) readFromNet.readObject();
-        } catch (IOException | ClassNotFoundException ex) {
-            System.err.println("[openTransaction] Error when Writing/reading Message");
-        }
-        
+
         return transactionID;
     }
 
@@ -74,21 +75,28 @@ public class TransactionServerProxy implements MessageTypes{
      * @return the status, i.e. either TRANSACTION_COMMITTED or TRANSACTION_ABORTED
      */
     public int closeTransaction() {
-        int returnStatus = TRANSACTION_ABORTED;
+        int returnStatus = TRANSACTION_ABORTED; // Default to aborted in case of an error
 
-        // send CLOSE_TRANSACTION message & receive returnStatus
-        // shut down connection
-        // ...
-        try{
-            writeToNet.writeObject(new Message(CLOSE_TRANSACTION, null));
-            returnStatus = (int) readFromNet.readObject();
+        try {
+            // Send CLOSE_TRANSACTION message to the server
+            Message closeTransactionMessage = new Message(CLOSE_TRANSACTION, transactionID);
+            writeToNet.writeObject(closeTransactionMessage);
 
-            // close all aspects 
-            readFromNet.close();
-            writeToNet.close();
-            serverConnection.close();
-        } catch (IOException | ClassNotFoundException ex) {
-            System.err.println("[closeTransaction] Error occured");
+            // Receive the transaction's final status from the server
+            Message responseMessage = (Message) readFromNet.readObject();
+            returnStatus = responseMessage.getType();
+
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error in closeTransaction: " + e.getMessage());
+        } finally {
+            // Ensure the connection is closed after completing the transaction
+            try {
+                if (serverConnection != null) {
+                    serverConnection.close();
+                }
+            } catch (IOException e) {
+                System.err.println("Error closing connection in closeTransaction: " + e.getMessage());
+            }
         }
 
         return returnStatus;
@@ -104,13 +112,17 @@ public class TransactionServerProxy implements MessageTypes{
     public int read(int accountNumber) {
         int balance = 0;
 
-        // write READ_REQUEST and receive balance
-        // ...
-        try{
-            writeToNet.writeObject(new Message(READ_REQUEST, accountNumber));
-            balance = (int) readFromNet.readObject();
-        } catch (IOException | ClassNotFoundException ex) {
-            System.err.println("[read] Error in Account Number");
+        try {
+            // Send READ_REQUEST message to the server with the account number
+            Message readRequestMessage = new Message(READ_REQUEST, accountNumber);
+            writeToNet.writeObject(readRequestMessage);
+
+            // Receive the balance from the server
+            Message responseMessage = (Message) readFromNet.readObject();
+            balance = (Integer) responseMessage.getContent();
+
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error in read: " + e.getMessage());
         }
 
         return balance;
@@ -124,18 +136,22 @@ public class TransactionServerProxy implements MessageTypes{
  * 
  * @return the prior account balance
  */
-    public int write(int accountNumber, int amount) {  
-        int balance = 0;
-        
-        // write WRITE_REQUEST and receive prior balance
-        // ...
-        try{
-            writeToNet.writeObject(new Message(WRITE_REQUEST, new Object[]{accountNumber, amount}));
-            return (int) readFromNet.readObject();
-        } catch (IOException | ClassNotFoundException ex) {
-            System.err.println("[write] Error has occured in Write");
+    public int write(int accountNumber, int amount) {
+        int priorBalance = 0;
+
+        try {
+            // Create a write request message with the account number and amount as content
+            Message writeRequestMessage = new Message(WRITE_REQUEST, new int[] { accountNumber, amount });
+            writeToNet.writeObject(writeRequestMessage);
+
+            // Receive the prior balance from the server
+            Message responseMessage = (Message) readFromNet.readObject();
+            priorBalance = (Integer) responseMessage.getContent();
+
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error in write: " + e.getMessage());
         }
-        
-        return balance;
+
+        return priorBalance;
     }
 }
